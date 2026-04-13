@@ -1,107 +1,115 @@
-# Generic Optimization Template for Cadence / Ocean
+# Cadence Analog Optimization Template
 
-This repository now includes a reusable template:
+This repository provides a reusable Python framework for analog circuit optimization with Cadence/Ocean in the loop. It is intended for studies where the simulation workflow stays fixed while the optimization algorithm, circuit parameters, constraints, and figure of merit vary across experiments.
 
-- [generic_optimization_template.py](/D:/Research_Quantum-AI%20for%20AICD/candence/DemoFolder/generic_optimization_template.py)
+The framework separates reusable infrastructure from problem-specific logic:
 
-The goal of this template is simple:
+- circuit input definition
+- simulator input generation
+- Ocean execution
+- result parsing
+- feasibility checking
+- FoM evaluation
+- optimization history logging
 
-- keep the common workflow unchanged
-- change only the parts that depend on the circuit, outputs, FoM, constraints, and optimization algorithm
+This makes it easier to compare multiple optimization methods under the same simulation and evaluation conditions.
 
-## 1. Common workflow kept unchanged
+## Overview
 
-The template keeps the same backbone that usually appears in Cadence-based optimization scripts:
+The repository is suitable for optimization-driven analog design tasks such as:
 
-1. define input parameters
-2. convert an optimization vector into a full parameter dictionary
-3. write the simulator input file
-4. run Ocean / Cadence
-5. read the simulator result file
-6. apply constraints
-7. calculate FoM
-8. let the optimization algorithm update the population
-9. save optimization history to Excel
+- bandgap reference optimization
+- LDO optimization
+- OTA optimization
+- inverter sizing
+- any Cadence-based circuit where Python writes input parameters and reads simulator outputs
 
-That means when you switch from one circuit to another, or from TLBO to DSA to Hybrid, you do not need to rewrite the whole pipeline.
-
-## 2. Which file to edit
-
-Main file:
+The main reusable file is:
 
 - [generic_optimization_template.py](/D:/Research_Quantum-AI%20for%20AICD/candence/DemoFolder/generic_optimization_template.py)
 
-The important sections are already separated clearly:
+## Workflow
+
+For each candidate solution, the template follows the same pipeline:
+
+1. build a complete parameter dictionary from optimized, fixed, and linked parameters
+2. write the simulator input file in a predefined order
+3. call Ocean in batch mode
+4. read the result file produced by the simulator
+5. map raw outputs into named metrics
+6. check feasibility constraints
+7. compute a figure of merit for feasible solutions
+8. update the optimization population
+9. store optimization history in Excel format
+
+This flow is algorithm-independent. Only the population update rule needs to be replaced when switching between DSA, TLBO, Hybrid TLBO-DSA, PSO, or any other metaheuristic.
+
+## Why This Structure Matters
+
+The template is intended for controlled optimization studies where:
+
+- the circuit is fixed
+- the simulation flow is fixed
+- the outputs are fixed
+- the constraints are fixed
+- the FoM is fixed
+- only the optimization strategy changes
+
+That setup makes algorithm comparison clearer and more reproducible.
+
+## Suggested Repository Layout
+
+```text
+repo/
+|- README.md
+|- generic_optimization_template.py
+|- DSA_py_bandgap.py
+|- TLBO_py_bandgap.py
+|- Hybrid_TLBO_DSA.py
+|- Analyse.ocn
+|- Analyse_new.ocn
+`- example_results/
+```
+
+## Template Structure
+
+The template is organized into the following sections:
 
 - `PROJECT / TOOL CONFIGURATION`
 - `PARAMETER CONFIGURATION`
 - `OUTPUT CONFIGURATION`
 - `evaluate_constraints()`
 - `calculate_fom()`
-- `TemplateOptimizationAlgorithm.propose_new_population()`
+- `TemplateOptimizationAlgorithm`
 
-## 3. How to customize the template
+These are the intended customization points when adapting the framework to another circuit or another algorithm.
 
-### 3.1. Set simulator files and run command
+## Parameter Model
 
-Edit these variables near the top of the file:
+The template supports three types of parameters.
 
-```python
-PROJECT_NAME = "VARIABLE_PROJECT_NAME"
-ALGORITHM_NAME = "VARIABLE_ALGORITHM_NAME"
-CIRCUIT_NAME = "VARIABLE_CIRCUIT_NAME"
+### Optimized Parameters
 
-SIMULATOR_COMMAND = ["ocean", "-nograph", "-restore", "VARIABLE_ANALYSE.ocn"]
-PARAM_FILE = "VARIABLE_circuit_params.txt"
-RESULT_FILE = "VARIABLE_result.txt"
-EXCEL_FILE = "VARIABLE_optimization_history.xlsx"
-FILES_TO_COPY_TO_RUN_FOLDER = ["VARIABLE_ANALYSE.ocn"]
-```
-
-What to change:
-
-- `PROJECT_NAME`: your project or paper name
-- `ALGORITHM_NAME`: `DSA`, `TLBO`, `Hybrid_TLBO_DSA`, `PSO`, etc.
-- `CIRCUIT_NAME`: your circuit name such as `Bandgap`, `LDO`, `OTA`, `Comparator`
-- `SIMULATOR_COMMAND`: the exact command used to call Ocean
-- `PARAM_FILE`: the text file written by Python and read by Ocean
-- `RESULT_FILE`: the text file written by Ocean and read by Python
-- `EXCEL_FILE`: final optimization history file
-- `FILES_TO_COPY_TO_RUN_FOLDER`: files that must exist inside each run folder
-
-### 3.2. Set optimization inputs
-
-Edit:
+These parameters are updated by the optimization algorithm.
 
 ```python
 OPTIMIZED_PARAMETERS = [
     {"name": "VARIABLE_1", "lower": 0.18, "upper": 10.0, "scale": 1e-6, "unit": "um"},
     {"name": "VARIABLE_2", "lower": 0.18, "upper": 10.0, "scale": 1e-6, "unit": "um"},
-    {"name": "VARIABLE_3", "lower": 1.0, "upper": 100.0, "scale": 1e-12, "unit": "pF"},
 ]
 ```
 
-Use this for variables updated by the optimization algorithm.
-
-Meaning of each field:
+Each parameter includes:
 
 - `name`: parameter name
-- `lower`: lower bound in optimization space
-- `upper`: upper bound in optimization space
-- `scale`: multiplier used before writing to simulator
-- `unit`: only for logging / Excel header
+- `lower`: lower bound in search space
+- `upper`: upper bound in search space
+- `scale`: conversion factor before writing to the simulator
+- `unit`: unit label for logging
 
-Example:
+### Fixed Parameters
 
-```python
-{"name": "L", "lower": 0.18, "upper": 2.0, "scale": 1e-6, "unit": "um"}
-```
-
-If the algorithm works in micrometers but Cadence expects meters, use `scale = 1e-6`.
-
-### 3.3. Set fixed parameters
-
-Edit:
+These parameters are passed to the simulator but are not updated by the algorithm.
 
 ```python
 FIXED_PARAMETERS = [
@@ -109,18 +117,9 @@ FIXED_PARAMETERS = [
 ]
 ```
 
-Use this for parameters that never change during optimization.
+### Linked Parameters
 
-Examples:
-
-- `VDD`
-- `Temperature`
-- `Load_Current`
-- `Reference_Current`
-
-### 3.4. Set linked parameters
-
-Edit:
+These parameters copy the value of another parameter.
 
 ```python
 LINKED_PARAMETERS = [
@@ -128,100 +127,51 @@ LINKED_PARAMETERS = [
 ]
 ```
 
-Use this when one parameter must copy another parameter.
+This is useful for mirrored devices or matched design variables.
 
-Typical examples:
+## Simulator Input Interface
 
-- PMOS width equals NMOS width
-- two devices share the same length
-- mirrored current branch reuses one value
-
-### 3.5. Set the exact input order expected by Ocean
-
-Edit:
+The order of values written to the simulator input file is defined by:
 
 ```python
 INPUT_PARAMETER_ORDER = [
     "VARIABLE_1",
     "VARIABLE_2",
-    "VARIABLE_3",
     "FIXED_1",
     "LINKED_1",
 ]
 ```
 
-This order is very important.
+This order must match the exact order expected by the Ocean script.
 
-The function `write_parameter_file()` writes values exactly in this order. If your Ocean script reads parameters in a different order, simulation results will be wrong even if the code runs successfully.
+For a batch of candidate solutions, the template writes values sample by sample. If the simulator expects a different layout, the write function should be adapted.
 
-### 3.6. Set outputs
+## Simulator Output Interface
 
-Edit:
+The simulator outputs are declared by:
 
 ```python
 OUTPUT_NAMES = [
     "OUTPUT_1",
     "OUTPUT_2",
     "OUTPUT_3",
-    "OUTPUT_4",
 ]
 ```
 
-These names must match the order used in `RESULT_FILE`.
-
-If your simulator writes:
+The parser expects a flat numeric result file containing:
 
 ```text
-cond
-tc
-psrr_1k
-phase_margin
+OUTPUT_COUNT x BATCH_SIZE
 ```
 
-then use:
+values in output-major order.
 
-```python
-OUTPUT_NAMES = ["cond", "tc", "psrr_1k", "phase_margin"]
-```
-
-## 4. How the input and output files are interpreted
-
-### 4.1. Input file format
-
-`write_parameter_file(batch_solutions)` writes all input values line by line.
-
-For batch size = 2 and:
-
-- `INPUT_PARAMETER_ORDER = ["L", "W", "VDD"]`
-
-the parameter file will look like:
-
-```text
-L_sample_1
-W_sample_1
-VDD_sample_1
-L_sample_2
-W_sample_2
-VDD_sample_2
-```
-
-So the file is written sample by sample.
-
-### 4.2. Result file format
-
-`read_result_file(expected_batch_size)` expects a flat file with:
-
-```text
-OUTPUT_COUNT x expected_batch_size
-```
-
-numeric values.
-
-For batch size = 2 and:
+Example for:
 
 - `OUTPUT_NAMES = ["cond", "tc", "psrr_1k"]`
+- `BATCH_SIZE = 2`
 
-the expected result order is:
+Expected result file layout:
 
 ```text
 cond_sample_1
@@ -232,92 +182,58 @@ psrr_1k_sample_1
 psrr_1k_sample_2
 ```
 
-So the file is grouped by output, not by sample.
+If the Ocean script writes another layout, the parser must be updated accordingly.
 
-If your Ocean script writes data in another order, you must adjust either:
+## Constraints
 
-- the Ocean output writing order
-- or the Python reshape / parsing logic
-
-## 5. How to define constraints
-
-Edit the function:
+Feasibility is handled in:
 
 ```python
 def evaluate_constraints(output_dict):
 ```
 
-This function must return:
+This function returns:
 
-- `valid_mask`: boolean array
-- `constraint_info`: additional values for logging
-
-Example for analog constraints:
-
-```python
-def evaluate_constraints(output_dict):
-    valid_mask = (
-        (output_dict["cond"] >= 1.0)
-        & (output_dict["gain_margin"] > 0.0)
-        & (output_dict["phase_margin"] >= 45.0)
-    )
-
-    constraint_info = {
-        "valid": valid_mask.astype(int),
-    }
-    return valid_mask, constraint_info
-```
-
-Meaning:
-
-- if a solution satisfies all constraints, it is feasible
-- if not, it is infeasible
-
-In the template, infeasible solutions receive `FoM = 0.0` by default.
-
-## 6. How to define FoM
-
-Edit the function:
-
-```python
-def calculate_fom(output_dict, valid_mask):
-```
+- `valid_mask`: Boolean feasibility array
+- `constraint_info`: optional extra values for logging
 
 Example:
 
 ```python
-def calculate_fom(output_dict, valid_mask):
-    fom = np.zeros_like(output_dict["tc"], dtype=float)
-    tc_safe = np.maximum(np.abs(output_dict["tc"]), 1e-12)
-
-    fom[valid_mask] = (
-        np.abs(output_dict["psrr_1k"][valid_mask])
-        * np.maximum(output_dict["gain_margin"][valid_mask], 0.0)
-        * np.maximum(output_dict["phase_margin"][valid_mask], 0.0)
-        / tc_safe[valid_mask]
-    )
-    return fom
+valid_mask = (
+    (output_dict["cond"] >= 1.0)
+    & (output_dict["gain_margin"] > 0.0)
+    & (output_dict["phase_margin"] >= 45.0)
+)
 ```
 
-You can replace this with any objective:
+Only feasible solutions should receive a meaningful FoM. In the default template, infeasible solutions receive `FoM = 0.0`.
 
-- maximize gain
-- minimize power
-- maximize GBW / power
-- maximize PSRR and minimize TC
-- weighted sum of multiple metrics
-- penalty-based objective
+## Figure Of Merit
 
-Recommended rule:
+The objective is defined in:
 
-- handle constraints in `evaluate_constraints()`
-- calculate the objective only for feasible solutions in `calculate_fom()`
+```python
+def calculate_fom(output_dict, valid_mask):
+```
 
-## 7. How to change the optimization algorithm
+This function can represent any design target, including:
 
-The common Cadence-related part should stay the same.
+- gain maximization
+- power minimization
+- PSRR and phase-margin tradeoff
+- temperature-coefficient reduction
+- weighted multi-objective scoring
 
-Usually you only need to change:
+A common pattern is:
+
+1. evaluate feasibility in `evaluate_constraints()`
+2. assign nonzero FoM only to feasible solutions
+3. keep infeasible solutions at zero or apply a penalty
+
+## Algorithm Layer
+
+The optimization logic is intentionally isolated inside:
 
 ```python
 class TemplateOptimizationAlgorithm:
@@ -329,110 +245,74 @@ and especially:
 def propose_new_population(self, iteration_index):
 ```
 
-That is the place to insert your algorithm logic.
+This allows different metaheuristics to reuse the same Cadence interaction layer.
 
-### 7.1. If you use TLBO
+## Example Algorithm Variants
 
-Replace `propose_new_population()` with:
-
-- teacher phase
-- learner phase
-- any selection rule you already use in your TLBO code
-
-### 7.2. If you use DSA
-
-Replace `propose_new_population()` with:
-
-- donor / search step
-- trial solution generation
-- acceptance rule
-
-### 7.3. If you use your own Hybrid algorithm
-
-Keep the same simulation pipeline and combine your custom steps inside:
-
-- `propose_new_population()`
-- optionally `greedy_accept()`
-
-That way, your new algorithm still uses the same:
-
-- parameter writer
-- Ocean runner
-- result reader
-- constraint handler
-- FoM evaluator
-- Excel logging format
-
-## 8. Suggested workflow when adapting to a new circuit
-
-1. Duplicate `generic_optimization_template.py`
-2. Rename it, for example:
-   `TLBO_py_bandgap.py`
-3. Replace the project/file names at the top
-4. Define `OPTIMIZED_PARAMETERS`, `FIXED_PARAMETERS`, and `LINKED_PARAMETERS`
-5. Set `INPUT_PARAMETER_ORDER`
-6. Set `OUTPUT_NAMES`
-7. Edit `evaluate_constraints()`
-8. Edit `calculate_fom()`
-9. Replace `TemplateOptimizationAlgorithm` with your real algorithm
-10. Test with `BATCH_SIZE = 1` first
-11. After the file works, increase population size and iteration count
-
-## 9. Example mapping for your GitHub repository
-
-You mentioned three algorithm files:
-
-- `DSA`
-- `TLBO`
-- `Hybrid` (your proposed algorithm)
-
-You can present them in the repository like this:
+Within the same framework, different files can represent different optimization strategies:
 
 - `DSA_py_bandgap.py`
-  Uses the same Cadence input/output/FoM pipeline, but the search rule is pure DSA.
+  Uses the same simulator, outputs, constraints, and FoM, but applies a DSA-based search rule.
 - `TLBO_py_bandgap.py`
-  Uses the same Cadence input/output/FoM pipeline, but the update rule follows TLBO teacher and learner phases.
+  Uses the same simulator, outputs, constraints, and FoM, but applies TLBO teacher and learner phases.
 - `Hybrid_TLBO_DSA.py`
-  Uses the same Cadence input/output/FoM pipeline, but combines TLBO and DSA ideas in one search strategy.
+  Uses the same simulator, outputs, constraints, and FoM, but combines TLBO and DSA ideas into a hybrid update strategy.
 
-That makes the comparison very clear for GitHub readers:
+This organization is useful in comparative studies because the algorithm becomes the primary experimental variable.
 
-- same circuit
-- same simulator flow
-- same constraints
-- same FoM
-- only the optimization algorithm changes
+## Adapting The Template To A New Circuit
 
-This is the strongest way to show the value of your proposed Hybrid method, because readers can see that the algorithm is the only major difference.
+When moving to another circuit, the following sections usually need to be updated:
 
-## 10. Good practice before uploading to GitHub
+1. `SIMULATOR_COMMAND`
+2. `PARAM_FILE`
+3. `RESULT_FILE`
+4. `FILES_TO_COPY_TO_RUN_FOLDER`
+5. `OPTIMIZED_PARAMETERS`
+6. `FIXED_PARAMETERS`
+7. `LINKED_PARAMETERS`
+8. `INPUT_PARAMETER_ORDER`
+9. `OUTPUT_NAMES`
+10. `evaluate_constraints()`
+11. `calculate_fom()`
 
-Before publishing, check these items:
+In most cases, the batch simulation flow and result logging can remain unchanged.
 
-- remove local absolute paths if any
-- make sure file names are consistent
-- write clearly what each output means
-- explain the FoM formula in words
-- explain the constraints in words
-- mention the expected simulator result file order
-- keep one small example in comments for future reuse
+## Logged Results
 
-## 11. Recommended repository structure
+The template stores optimization history in Excel format, including:
 
-Example:
+- run index
+- iteration index
+- start and end time
+- elapsed time
+- best FoM
+- feasibility flag
+- optimized parameter values
+- fixed parameter values
+- linked parameter values
+- simulator outputs
 
-```text
-repo/
-├─ README.md
-├─ generic_optimization_template.py
-├─ DSA_py_bandgap.py
-├─ TLBO_py_bandgap.py
-├─ Hybrid_TLBO_DSA.py
-├─ Analyse.ocn
-├─ Analyse_new.ocn
-└─ example_results/
-```
+This history is helpful for convergence inspection and cross-algorithm comparison.
 
-If you want, the next good step is:
+## Notes For Public Release
 
-- I can also generate three cleaned public versions named exactly for `DSA`, `TLBO`, and `Hybrid`, all based on this template, so you can upload them directly to GitHub.
+Before publishing a project built on this template, it is recommended to:
+
+- remove machine-specific absolute paths
+- keep Ocean script names consistent
+- document the expected input and output file order
+- explain the meaning of each output metric
+- describe the constraint set clearly
+- describe the FoM in engineering terms
+- include at least one small reproducible example
+
+## Summary
+
+This repository is not tied to one specific analog block or one specific optimization method. It is a reusable Cadence/Ocean optimization framework where the simulator pipeline stays fixed and the problem-specific logic is easy to replace.
+
+That makes it suitable for:
+
+- adapting quickly to new circuits
+- comparing optimization algorithms fairly
+- publishing structured DSA, TLBO, and hybrid optimization studies
