@@ -1,0 +1,106 @@
+(procedure khoitao()
+  simulator('spectre)
+  design("/home/disk/simulation/SIM_IC61/Corebandgap_startup_test/spectre/config/netlist/netlist")
+  resultsDir("/home/disk/simulation/SIM_IC61/Corebandgap_startup_test/spectre/config")
+
+  modelFile(
+    '(
+      "/home/hoangtrang/Thu_vien_PDK/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914/gpdk090_v4.6/models/spectre/gpdk090.scs"
+      "NN"
+    )
+  fin=infile("./PSO_circuit_params.txt")  ;;input file DE_thongso.txt as fin
+  fscanf(fin "\n%s" R0_var	)
+  fscanf(fin "\n%s" L_var	)
+  fscanf(fin "\n%s" W_var	)
+  close(fin)
+)
+)
+
+(procedure chay()
+  ;; =====================================================
+  ;; Analysis
+  ;; =====================================================
+  analysis('stb
+    ?start "1"
+    ?stop  "1G"
+    ?dec   "10"
+    ?probe "/I0/IPRB0"
+  )
+
+  analysis('xf
+    ?start "1"
+    ?stop  "1G"
+    ?dec   "10"
+    ?p     "/VREF"
+    ?n     "/VSS"
+  )
+
+  ;; =====================================================
+  ;; Design Variables
+  ;; =====================================================
+  desVar("L"     "L_var")
+  desVar("W"     "W_var")
+  desVar("Cc"    0)
+  desVar("R4"    "205*2.295k")
+  desVar("Cout"  2p)
+  desVar("Ibias" 0.1u)
+  desVar("R0"    "R0_var")
+  desVar("VDD"   2)
+  desVar("R5"    "205*2.295k")
+  desVar("R1"    "11.124*R0_var")
+  desVar("R2"    "11.124*R0_var")
+  desVar("R3"    "11.124*R0_var")
+
+  ;; =====================================================
+  ;; Environment
+  ;; =====================================================
+  envOption(
+    'analysisOrder list("xf" "stb")
+  )
+
+  saveOption(?simOutputFormat "")
+  temp(27)
+
+  ;; =====================================================
+  ;; Run
+  ;; =====================================================
+  run()
+
+  ;; =====================================================
+  ;; Results
+  ;; =====================================================
+  Gain_Margin     = getData("/gainMargin" ?result "stb_margin")
+  Loop_Gain_Phase = phaseDegUnwrapped(getData("loopGain" ?result "stb"))
+
+  PSRR_1k         = value(db(getData("/V0" ?result "xf")) 1000)
+  PSRR_1M         = value(db(getData("/V0" ?result "xf")) 1000000)
+  PSRR            = db(getData("/V0" ?result "xf"))
+
+  Loop_Gain_dB20  = db(mag(getData("loopGain" ?result "stb")))
+  Phase_Margin    = getData("/phaseMargin" ?result "stb_margin")
+  DC_Gain         = value(db(mag(getData("loopGain" ?result "stb"))) 1)
+	
+
+  fileresult=outfile("./Result_Analyse.txt") 
+    fprintf(fileresult "%d\r" PSRR_1k )
+    fprintf(fileresult "%d\r" Phase_Margin)
+    fprintf(fileresult "%d\r" DC_Gain)
+  close(fileresult)
+
+
+  ;; =====================================================
+  ;; Plot
+  ;; =====================================================
+  plot(Gain_Margin     ?expr '("Gain Margin"))
+  plot(Loop_Gain_Phase ?expr '("Loop Gain Phase"))
+  plot(PSRR_1k         ?expr '("PSRR_1k"))
+  plot(PSRR_1M         ?expr '("PSRR_1M"))
+  plot(PSRR            ?expr '("PSRR"))
+  plot(Loop_Gain_dB20  ?expr '("Loop gain dB20"))
+  plot(Phase_Margin    ?expr '("Phase Margin"))
+  plot(DC_Gain         ?expr '("DC_Gain"))
+)
+
+khoitao()
+chay()
+exit
